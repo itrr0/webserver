@@ -1,13 +1,27 @@
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
+use std::env;
+use std::fs;
 
-fn handle_client(mut stream: TcpStream) {
+fn get_request_get_path(request: &str) -> Option<String> {      // Shoutout chatgpt🙏
+    request.lines()
+    .next() // Get the first line of the request
+    .and_then(|line| line.split_whitespace().nth(1)) // Get the URL path
+    .map(String::from) // Convert &str to String
+}
+
+fn send_file(stream: &mut TcpStream, file_path: String) {
+    match fs::exists(); // check if file exists and send it through stream if it does.
+    let contents = fs::read_to
+}
+
+fn handle_client(stream: &mut TcpStream) {
     let request_ip = stream.peer_addr().unwrap().to_string();
     println!("Client connected, IP: {request_ip}");
 
     let mut buffer = [0; 1024];
-    let mut filename: String = String::new();
-    match stream.read(&mut buffer) {        // FIX THIS BULLSHIT
+    let mut file_path: String = String::new();
+    match stream.read(&mut buffer) {
         Err(e) => {
             eprintln!("Failed to read request: {e}");
         },
@@ -23,14 +37,21 @@ fn handle_client(mut stream: TcpStream) {
                 eprintln!("Invalid request: does not start with 'GET'");
                 return;
             }
-            filename = request_str.rsplit('/').next().map(|s| s.to_string()).unwrap_or_default();
+            match get_request_get_path(request_str) {
+                Some(_file_path) => file_path = _file_path,
+                None => eprintln!("Could not extract filepath from GET request"),
+            };
         },
     }
 
-    println!("Request received:\n{filename}");
+    println!("Request for {file_path} received!");
 
-    let _ = stream.write(b"HTTP/1.1 200 OK\r\nContent-Length: 48\r\n\r\n<h1>Hello, world!</h1>");
-    let _ = stream.write(b"<h2>New bit of text...<h2>");
+    let _ = stream.write(b"HTTP/1.1 200 OK\r\n\r\n");
+    if file_path == String::from("/") {
+        send_file(stream, String::from("/index.html")); // and index.html
+    } else {
+        let _ = stream.write(b"<h1>empty</h1>");
+    }
 }
 
 fn main() -> std::io::Result<()> {
@@ -40,8 +61,8 @@ fn main() -> std::io::Result<()> {
     // Do stuff when someone requests stuff
     for stream in listener.incoming() {
         match stream {
-            Ok(stream) => {
-                handle_client(stream);
+            Ok(mut stream) => {
+                handle_client(&mut stream);
             }
             Err(e) => {
                 eprintln!("Failed to accept connection: {e}");
