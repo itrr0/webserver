@@ -1,18 +1,92 @@
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
-use std::env;
 use std::fs;
+use std::path::Path;
 
 fn get_request_get_path(request: &str) -> Option<String> {      // Shoutout chatgpt🙏
     request.lines()
-    .next() // Get the first line of the request
-    .and_then(|line| line.split_whitespace().nth(1)) // Get the URL path
-    .map(String::from) // Convert &str to String
+        .next() // Get the first line of the request
+        .and_then(|line| line.split_whitespace().nth(1)) // Get the URL path
+        .map(String::from) // Convert &str to String
 }
 
-fn send_file(stream: &mut TcpStream, file_path: String) {
-    match fs::exists(); // check if file exists and send it through stream if it does.
-    let contents = fs::read_to
+fn send_file(stream: &mut TcpStream, file_path_param: String) {
+    let mut file_path = file_path_param.clone();
+    if file_path.ends_with("/") {
+        send_file(stream, file_path + "index.html");
+        return;
+    }
+
+    file_path.remove(0); // If filename doesn't end in /, remove the first character (which is /)
+
+    if !Path::new(&file_path).exists() {
+        let _ = stream.write_all(b"HTTP/1.1 404 NOT FOUND\r\nContent-Length: 22\r\n\r\n<h1>404 Not Found</h1>");
+        return;
+    }
+    if file_path.ends_with(".jpg") || file_path.ends_with(".jpeg") || file_path.ends_with(".png") || file_path.ends_with(".gif") || file_path.ends_with(".svg") {
+        let file_content = match fs::read(&file_path) {
+            Ok(content) => content,
+            Err(e) => {
+                eprintln!("Failed to read file: {e}");
+                return;
+            },
+        };
+        let response_header = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: image/{}\r\n\r\n",
+            file_content.len(),
+            if file_path.ends_with(".jpg") || file_path.ends_with(".jpeg") {
+                "jpeg"
+            } else if file_path.ends_with(".png") {
+                "png"
+            } else if file_path.ends_with(".svg") {
+                "svg+xml"
+            } else {
+                "gif"
+            }
+        );
+        let _ = stream.write_all(response_header.as_bytes());
+        let _ = stream.write_all(&file_content);
+        return;
+    }
+
+    let file_content = match fs::read(&file_path) {
+        Ok(content) => content,
+        Err(e) => {
+            eprintln!("Failed to read file: {e}");
+            return;
+        },
+    };
+
+    let response_header = if file_path.ends_with(".jpg") || file_path.ends_with(".jpeg") || file_path.ends_with(".png") || file_path.ends_with(".gif") || file_path.ends_with(".svg") {
+        let file_content = match fs::read(&file_path) {
+            Ok(content) => content,
+            Err(e) => {
+                eprintln!("Failed to read file: {e}");
+                return;
+            },
+        };
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: image/{}\r\n\r\n",
+            file_content.len(),
+            if file_path.ends_with(".jpg") || file_path.ends_with(".jpeg") {
+                "jpeg"
+            } else if file_path.ends_with(".png") {
+                "png"
+            } else if file_path.ends_with(".svg") {
+                "svg+xml"
+            } else {
+                "gif"
+            }
+        )
+    } else {
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n",
+            file_content.len()
+        )
+    };
+
+    let _ = stream.write_all(response_header.as_bytes());
+    let _ = stream.write_all(&file_content);
 }
 
 fn handle_client(stream: &mut TcpStream) {
@@ -46,17 +120,12 @@ fn handle_client(stream: &mut TcpStream) {
 
     println!("Request for {file_path} received!");
 
-    let _ = stream.write(b"HTTP/1.1 200 OK\r\n\r\n");
-    if file_path == String::from("/") {
-        send_file(stream, String::from("/index.html")); // and index.html
-    } else {
-        let _ = stream.write(b"<h1>empty</h1>");
-    }
+    send_file(stream, file_path);
 }
 
 fn main() -> std::io::Result<()> {
-    let listener = TcpListener::bind("192.168.2.120:8080")?;
-    println!("Listening on 192.168.2.120:8080");
+    let listener = TcpListener::bind("127.0.0.1:8080")?;
+    println!("Listening on 127.0.0.1:8080");
 
     // Do stuff when someone requests stuff
     for stream in listener.incoming() {
